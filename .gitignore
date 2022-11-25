@@ -1,0 +1,11 @@
+*.bak
+*.uvprojx
+*.uvoptx
+*.dbgconf
+*.map
+*.lst
+Objects/
+RTE/
+Listings/
+DebugConfig/
+*.uvguix*
