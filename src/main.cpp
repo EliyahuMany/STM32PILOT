@@ -11,6 +11,8 @@
 #include "pwmGenerator.h"
 #include "flightState.h"
 
+#define SIMULATION_MODE true
+
 //volatile uint32_t msTicks, _tick,loop_timer = 0 ;
 volatile uint32_t loop_timer,last = 0;
 volatile unsigned char led_on;
@@ -24,6 +26,9 @@ bool start = false;
 
 double oldKp,oldKi,oldKd;
 
+float simFloatVar;
+
+bool pitchAttitudeFirst, rollAttitudeFirst = true;
 
 /**
 RC Channels:
@@ -91,8 +96,8 @@ int main()
 	for (int i=0;i<10000000;i++); // small delay for preventing touch movement
 	mpu.mpuInit();
 	
-	PIDController pidRoll = PIDController(anglesRoutineTimems/1000.0, 1, 0.06, 0);
-	PIDController pidPitch = PIDController(anglesRoutineTimems/1000.0, 1, 0.06, 0);
+	PIDController pidRoll = PIDController(anglesRoutineTimems/1000.0, 0.98, 6.8, 0.0003);
+	PIDController pidPitch = PIDController(anglesRoutineTimems/1000.0, 0.77, 25.0, 0.0);
 	
 
 	TIM_TypeDef* timers[] = {TIM4};
@@ -111,13 +116,23 @@ int main()
 		{
 			//loop_timer = GetTick();
 			// no need to check mpu and other things, just pass the user receiver values
-			pwmHandler->Disco(rc);
+			if (SIMULATION_MODE)
+			{
+				// send command to change pitch
+				printf("DP%f\n", float(mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+				printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+				printf("DT%f\n", float(mapDouble(rc->channels[rc->rcChannel.Throttle-1].pulseWidth, 1500, 2000, 0.0, 1.0))); 
+			}
+			else
+			{
+				pwmHandler->Disco(rc);
+			}
 			// check if switch changed position - change flight state
 			// rc->
 			if (rc->channels[rc->rcChannel.SwA-1].pulseWidth > 1800)
 			{
 				flightState->currentState = AttitudeHold;
-				flightState->AttitudeHold(0, 0);
+				flightState->AttitudeHold(20.0, 0);
 				start = false;
 			}
 			//rc->pp(); // print channels pwm
@@ -126,6 +141,10 @@ int main()
 		}
 		else if (flightState->currentState == AttitudeHold)
 		{
+			if (!pitchAttitudeFirst)
+						pitchAttitudeFirst = true;
+			if (!rollAttitudeFirst)
+						rollAttitudeFirst = true;
 			if (!start)
 			{
 				loop_timer = GetTick();
@@ -138,23 +157,33 @@ int main()
 				if (rc->channels[rc->rcChannel.SwB-1].pulseWidth < 1100)
 				{
 					// roll attitude hold
+					if (rollAttitudeFirst)
+						pidRoll.resetError();
 					GPIOB->ODR ^= GPIO_ODR_ODR14;
-					pidRoll.calculate(mpu.CombinedAngles_s.roll, flightState->GetAttitudeHoldParams().desiredRoll);
-					pidRoll.constrain(-45, 45, -3, 3); // min and max values allowed on pidResult
-					pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
-					pidPitch.calculate(mpu.CombinedAngles_s.pitch, 0);
-					pidPitch.constrain(-45, 45, -3, 3); // min and max values allowed on pidResult
-					pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
+					pidRoll.calculateIdeal(mpu.CombinedAngles_s.roll, flightState->GetAttitudeHoldParams().desiredRoll);
+					pidRoll.constrain(-45, 45, -1, 1); // min and max values allowed on pidResult
+					if (SIMULATION_MODE)
+					{
+						// send command to change pitch*
+						printf("RC%f\n", float(mapDouble(pidRoll.getPidResult(), -45.0, 45.0, -1.0, 1.0))*-1.0);
+						printf("DP%f\n", float(mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+					}
+					else
+					{
+						pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
+						pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
+					}
 					
 					if (((990 < rc->channels[rc->rcChannel.Aileron-1].pulseWidth) && (rc->channels[rc->rcChannel.Aileron-1].pulseWidth < 1490)) || ((1510 < rc->channels[rc->rcChannel.Aileron-1].pulseWidth) && (rc->channels[rc->rcChannel.Aileron-1].pulseWidth < 2010)))
 					{
 						// out of dead zone - set new pid setpoint
 						float oldDesiredRoll = flightState->GetAttitudeHoldParams().desiredRoll;
-						flightState->setAttitudeHoldRoll(oldDesiredRoll + map(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -45, 45) * 0.0075);
+						flightState->setAttitudeHoldRoll(oldDesiredRoll + mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -45, 45) * 0.0075);
 						if (flightState->GetAttitudeHoldParams().desiredRoll > 45)
-							flightState->AttitudeHold(0, 45);
+							flightState->setAttitudeHoldRoll(45);
 						else if (flightState->GetAttitudeHoldParams().desiredRoll < -45)
-							flightState->AttitudeHold(0, -45);
+							flightState->setAttitudeHoldRoll(-45);
+						printf("X: %f\n",flightState->GetAttitudeHoldParams().desiredRoll);
 					}
 					
 					// PID values change:
@@ -168,8 +197,8 @@ int main()
 						{
 							oldKp = pidRoll.getKp();
 							//printf("%f\n",map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							pidRoll.setKp(oldKp + map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							//printf("P: %f\n",pidRoll.getKp());
+							pidRoll.setKp(oldKp + mapDouble(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.01);
+							printf("P: %f\n",pidRoll.getKp());
 						}
 					}
 					else if ((rc->channels[rc->rcChannel.VarA-1].pulseWidth > 1510) && (rc->channels[rc->rcChannel.VarA-1].pulseWidth < 1800))
@@ -178,8 +207,8 @@ int main()
 						{
 							oldKi = pidRoll.getKi();
 							//printf("%f\n",map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							pidRoll.setKi(oldKi + map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							//printf("I: %f\n",pidRoll.getKi());
+							pidRoll.setKi(oldKi + mapDouble(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.01);
+							printf("I: %f\n",pidRoll.getKi());
 						}
 					}
 					else if ((rc->channels[rc->rcChannel.VarA-1].pulseWidth > 1810) && (rc->channels[rc->rcChannel.VarA-1].pulseWidth < 2010))
@@ -188,31 +217,40 @@ int main()
 						{
 							oldKd = pidRoll.getKd();
 							//printf("%f\n",map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							pidRoll.setKd(oldKd + map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							//printf("D: %f\n",pidRoll.getKd());
+							pidRoll.setKd(oldKd + mapDouble(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.00001);
+							printf("D: %f\n",pidRoll.getKd());
 						}
 					}
 				}
 				else if ((rc->channels[rc->rcChannel.SwB-1].pulseWidth > 1400) && (rc->channels[rc->rcChannel.SwB-1].pulseWidth < 1800))
 				{
 					// pitch attitude hold
+					if (pitchAttitudeFirst)
+						pidPitch.resetError();
 					GPIOB->ODR ^= GPIO_ODR_ODR14;
-					pidPitch.calculate(mpu.CombinedAngles_s.pitch, flightState->GetAttitudeHoldParams().desiredPitch);
-					pidPitch.constrain(-45, 45, -3, 3); // min and max values allowed on pidResult
-					pidRoll.calculate(mpu.CombinedAngles_s.roll, 0);
-					pidRoll.constrain(-45, 45, -3, 3); // min and max values allowed on pidResult
-					pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
-					pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
+					pidPitch.calculateIdeal(mpu.CombinedAngles_s.pitch, flightState->GetAttitudeHoldParams().desiredPitch);
+					pidPitch.constrain(-45, 45, -1, 1); // min and max values allowed on pidResult
+					if (SIMULATION_MODE)
+					{
+						// send command to change pitch*
+						printf("PC%f\n", float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0))*-1.0);
+						printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+					}
+					else
+					{
+						pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
+						pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
+					}
 					
 					if (((990 < rc->channels[rc->rcChannel.Elevator-1].pulseWidth) && (rc->channels[rc->rcChannel.Elevator-1].pulseWidth < 1490)) || ((1510 < rc->channels[rc->rcChannel.Elevator-1].pulseWidth) && (rc->channels[rc->rcChannel.Elevator-1].pulseWidth < 2010)))
 					{
 						// out of dead zone - set new pid setpoint
 						float oldDesiredPitch = flightState->GetAttitudeHoldParams().desiredPitch;
-						flightState->setAttitudeHoldPitch(oldDesiredPitch + map(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -45, 45) * 0.0075);
+						flightState->setAttitudeHoldPitch(oldDesiredPitch + mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -45, 45) * 0.0075);
 						if (flightState->GetAttitudeHoldParams().desiredPitch > 45)
-							flightState->AttitudeHold(0, 45);
+							flightState->setAttitudeHoldPitch(45);
 						else if (flightState->GetAttitudeHoldParams().desiredPitch < -45)
-							flightState->AttitudeHold(0, -45);
+							flightState->setAttitudeHoldPitch(-45);
 						printf("X: %f\n",flightState->GetAttitudeHoldParams().desiredPitch);
 					}
 					
@@ -227,7 +265,7 @@ int main()
 						{
 							oldKp = pidPitch.getKp();
 							//printf("%f\n",map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							pidPitch.setKp(oldKp + map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.001);
+							pidPitch.setKp(oldKp + mapDouble(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.01);
 							printf("P: %f\n",pidPitch.getKp());
 						}
 					}
@@ -237,7 +275,7 @@ int main()
 						{
 							oldKi = pidPitch.getKi();
 							//printf("%f\n",map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							pidPitch.setKi(oldKi + map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.001);
+							pidPitch.setKi(oldKi + mapDouble(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.1);
 							printf("I: %f\n",pidPitch.getKi());
 						}
 					}
@@ -247,7 +285,7 @@ int main()
 						{
 							oldKd = pidPitch.getKd();
 							//printf("%f\n",map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.0001);
-							pidPitch.setKd(oldKd + map(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.001);
+							pidPitch.setKd(oldKd + mapDouble(rc->channels[rc->rcChannel.Rudder-1].pulseWidth, 1000, 2000, -20, 20) * 0.001);
 							printf("D: %f\n",pidPitch.getKd());
 						}
 					}
@@ -255,35 +293,47 @@ int main()
 				else if ((rc->channels[rc->rcChannel.SwB-1].pulseWidth > 1800) && (rc->channels[rc->rcChannel.SwB-1].pulseWidth < 2010))
 				{
 					// both
+					if (rollAttitudeFirst)
+						pidRoll.resetError();
+					if (pitchAttitudeFirst)
+						pidPitch.resetError();
 					GPIOB->ODR ^= GPIO_ODR_ODR14;
-					pidRoll.calculate(mpu.CombinedAngles_s.roll, flightState->GetAttitudeHoldParams().desiredRoll);
-					pidRoll.constrain(-45, 45, -3, 3); // min and max values allowed on pidResult
-					pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
+					pidRoll.calculateIdeal(mpu.CombinedAngles_s.roll, flightState->GetAttitudeHoldParams().desiredRoll);
+					pidRoll.constrain(-45, 45, -1, 1); // min and max values allowed on pidResult
+					pidPitch.calculateIdeal(mpu.CombinedAngles_s.pitch, flightState->GetAttitudeHoldParams().desiredPitch);
+					pidPitch.constrain(-45, 45, -1, 1); // min and max values allowed on pidResult
+					if (SIMULATION_MODE)
+					{
+						// send command to change pitch*
+						printf("RC%f\n", float(mapDouble(pidRoll.getPidResult(), -45.0, 45.0, -1.0, 1.0))*-1.0);
+						printf("PC%f\n", float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0))*-1.0);
+					}
+					else
+					{
+						pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
+						pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
+					}
 					
 					if (((990 < rc->channels[rc->rcChannel.Aileron-1].pulseWidth) && (rc->channels[rc->rcChannel.Aileron-1].pulseWidth < 1490)) || ((1510 < rc->channels[rc->rcChannel.Aileron-1].pulseWidth) && (rc->channels[rc->rcChannel.Aileron-1].pulseWidth < 2010)))
 					{
 						// out of dead zone - set new pid setpoint
 						float oldDesiredRoll = flightState->GetAttitudeHoldParams().desiredRoll;
-						flightState->setAttitudeHoldRoll(oldDesiredRoll + map(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -45, 45) * 0.0075);
+						flightState->setAttitudeHoldRoll(oldDesiredRoll + mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -45, 45) * 0.0075);
 						if (flightState->GetAttitudeHoldParams().desiredRoll > 45)
-							flightState->AttitudeHold(0, 45);
+							flightState->setAttitudeHoldRoll(45);
 						else if (flightState->GetAttitudeHoldParams().desiredRoll < -45)
-							flightState->AttitudeHold(0, -45);
+							flightState->setAttitudeHoldRoll(-45);
 					}
 					
-					pidPitch.calculate(mpu.CombinedAngles_s.pitch, flightState->GetAttitudeHoldParams().desiredPitch);
-					pidPitch.constrain(-45, 45, -3, 3); // min and max values allowed on pidResult
-					pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
-					
-					if (((990 < rc->channels[rc->rcChannel.Aileron-1].pulseWidth) && (rc->channels[rc->rcChannel.Aileron-1].pulseWidth < 1490)) || ((1510 < rc->channels[rc->rcChannel.Aileron-1].pulseWidth) && (rc->channels[rc->rcChannel.Aileron-1].pulseWidth < 2010)))
+					if (((990 < rc->channels[rc->rcChannel.Elevator-1].pulseWidth) && (rc->channels[rc->rcChannel.Elevator-1].pulseWidth < 1490)) || ((1510 < rc->channels[rc->rcChannel.Elevator-1].pulseWidth) && (rc->channels[rc->rcChannel.Elevator-1].pulseWidth < 2010)))
 					{
 						// out of dead zone - set new pid setpoint
 						float oldDesiredPitch = flightState->GetAttitudeHoldParams().desiredPitch;
-						flightState->setAttitudeHoldPitch(oldDesiredPitch + map(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -45, 45) * 0.0075);
+						flightState->setAttitudeHoldPitch(oldDesiredPitch + mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -45, 45) * 0.0075);
 						if (flightState->GetAttitudeHoldParams().desiredPitch > 45)
-							flightState->AttitudeHold(0, 45);
+							flightState->setAttitudeHoldPitch(45);
 						else if (flightState->GetAttitudeHoldParams().desiredPitch < -45)
-							flightState->AttitudeHold(0, -45);
+							flightState->setAttitudeHoldPitch(-45);
 					}
 				}
 				
@@ -298,9 +348,25 @@ int main()
 			if (((GetTick() - loop_timer) % anglesRoutineTimems == 0))
 			{
 				GPIOB->ODR ^= GPIO_ODR_ODR13;
-				mpu.anglesAccel();
-				mpu.anglesGyro(anglesRoutineTimems);
-				mpu.combinedAngles();
+				if (SIMULATION_MODE)
+				{
+					// read 6dof simulation longitu**** data and store
+					// request data
+					printf("SendP\n");
+					scanf("%f",&simFloatVar);
+					if (simFloatVar >= 0 || simFloatVar <= 0)
+						mpu.setCombinedPitch(simFloatVar);
+					printf("SendR\n");
+					scanf("%f",&simFloatVar);
+					if (simFloatVar >= 0 || simFloatVar <= 0)
+						mpu.setCombinedRoll(simFloatVar);
+				}
+				else
+				{
+					mpu.anglesAccel();
+					mpu.anglesGyro(anglesRoutineTimems);
+					mpu.combinedAngles();
+				}
 				while((GetTick() - loop_timer) % anglesRoutineTimems == 0);
 			}
 		}

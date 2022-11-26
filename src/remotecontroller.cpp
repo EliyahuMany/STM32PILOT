@@ -1,5 +1,6 @@
 #include "remotecontroller.h"
 #include "uart.h"
+#include "utils.h"
 
 
 
@@ -128,7 +129,7 @@ void RemoteController::pp()
 int32_t RemoteController::getChannelPWM(uint8_t channel)
 {
 	channel -= 1;
-	return this->channels[channel].pulseWidth;
+	return constrain(this->channels[channel].pulseWidth, 1000, 2000);
 }
 
 void RemoteController::chan_counter(uint8_t i) // i IS THE REMOTE CONTROL CHANNEL (not the channel of the timers)
@@ -187,7 +188,7 @@ void RemoteController::ppm_counter(uint8_t i) // i IS THE REMOTE CONTROL CHANNEL
 			else if (foundSync)
 			{
 				// store pulse width
-				this->channels[channel_counter-1].pulseWidth = pulse_width;
+				this->channels[channel_counter-1].pulseWidth = constrain(pulse_width, 1000, 2000);
 			}
 		}
 	}

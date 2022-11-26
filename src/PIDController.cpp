@@ -7,6 +7,7 @@ PIDController::PIDController(double dt, double Kp, double Ki, double Kd)
 	this->Ki = Ki;
 	this->Kd = Kd;
 	this->previousError = 0;
+	this->previousValue = 0;
 }
 
 void PIDController::calculate(double pval, double setpoint)
@@ -36,7 +37,37 @@ void PIDController::calculate(double pval, double setpoint)
 	this->pidResult = pout + iout + dout;
 }
 
-double PIDController::constrain(int min, int max, int minSaturate, int maxSaturate)
+
+void PIDController::calculateIdeal(double pval, double setpoint)
+{
+	double error;
+	// calculate error
+	error = pval - setpoint;
+	this->error = error;
+	
+	// proportinal calc
+	double pout;
+	pout = this->Kp * error;
+	this->pout = pout;
+	
+	// integral calc
+	double iout;
+	iout = this->Ki * error * this->dt;
+	this->iout = iout;
+	
+	// derivative calc
+	double dout;
+	dout = this->Kd * (pval - this->previousValue) / dt;
+	this->dout = dout;
+	
+	this->previousError = error;
+	this->previousValue = pval;
+	
+	this->pidResult = pout + iout + dout;
+}
+
+
+void PIDController::constrain(double min, double max, double minSaturate, double maxSaturate)
 {
 	if (this->pidResult < min)
 		this->pidResult = min;
@@ -87,4 +118,10 @@ double PIDController::getKd()
 void PIDController::setKd(float val)
 {
 	this->Kd = val;
+}
+
+void PIDController::resetError()
+{
+	this->previousError = 0;
+	this->previousValue = 0;
 }
