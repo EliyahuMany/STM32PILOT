@@ -37,6 +37,7 @@ class PIDController
 		double error; // for debugging use
 		double previousError;
 		double previousValue;
+		//double previousDerivative;
 	
 		
 };

@@ -12,6 +12,7 @@
 #include "flightState.h"
 
 #define SIMULATION_MODE true
+#define SIMULATION_MSG_LEN 32
 
 //volatile uint32_t msTicks, _tick,loop_timer = 0 ;
 volatile uint32_t loop_timer,last = 0;
@@ -20,6 +21,7 @@ volatile uint32_t count, prev, tot, now = 0 ;
 volatile uint32_t count2, prev2, tot2 = 0 ;
 volatile bool press,int_flag = false;
 const uint8_t anglesRoutineTimems = 4;
+const uint8_t servoLoopTimeMs = 4*5-1;
 int loopCounter = 0;
 int wtf = 0;
 bool start = false;
@@ -35,7 +37,12 @@ RC Channels:
 
 */
 
-
+union hexToFloat
+{
+	char c[4];
+	float fval;
+	int ival;
+};
 
 RemoteController *rc; // need to find a way to attach class members function into interrupts without creating global variables like this
 
@@ -97,7 +104,11 @@ int main()
 	mpu.mpuInit();
 	
 	PIDController pidRoll = PIDController(anglesRoutineTimems/1000.0, 0.98, 6.8, 0.0003);
-	PIDController pidPitch = PIDController(anglesRoutineTimems/1000.0, 0.77, 25.0, 0.0);
+	//PIDController pidPitch = PIDController(anglesRoutineTimems/1000.0, 0.77, 25.0, 0.0);
+	PIDController pidPitch = PIDController(anglesRoutineTimems/1000.0, 7.0, 80.0, 0.0);
+	PIDController pidPitchAlt = PIDController(anglesRoutineTimems/1000.0, 1.1, 10.0, 0.0);
+	PIDController pidAlt = PIDController(anglesRoutineTimems/1000.0, 1.2, 3.0, 0.0001);
+	float testAlt = 0.0f;
 	
 
 	TIM_TypeDef* timers[] = {TIM4};
@@ -110,6 +121,11 @@ int main()
 
 	flightState->currentState = Disco;
 	start = false;
+	
+	//char *testBytes = (char*)malloc(SIMULATION_MSG_LEN);
+	char testBytes[61];
+	hexToFloat conv;
+	
 	while (true)
 	{
 		if (flightState->currentState == Disco)
@@ -150,7 +166,7 @@ int main()
 				loop_timer = GetTick();
 				start = true;
 			}
-			if ((GetTick() > loop_timer) && ((GetTick() - loop_timer) % 19 == 0))
+			if ((GetTick() > loop_timer) && ((GetTick() - loop_timer) % servoLoopTimeMs == 0))
 			{
 				
 				
@@ -170,8 +186,8 @@ int main()
 					}
 					else
 					{
-						pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
 						pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
+						pwmHandler->sendPWM(rc->rcChannel.Elevator, rc->getChannelPWM(rc->rcChannel.Elevator));
 					}
 					
 					if (((990 < rc->channels[rc->rcChannel.Aileron-1].pulseWidth) && (rc->channels[rc->rcChannel.Aileron-1].pulseWidth < 1490)) || ((1510 < rc->channels[rc->rcChannel.Aileron-1].pulseWidth) && (rc->channels[rc->rcChannel.Aileron-1].pulseWidth < 2010)))
@@ -228,19 +244,74 @@ int main()
 					if (pitchAttitudeFirst)
 						pidPitch.resetError();
 					GPIOB->ODR ^= GPIO_ODR_ODR14;
-					pidPitch.calculateIdeal(mpu.CombinedAngles_s.pitch, flightState->GetAttitudeHoldParams().desiredPitch);
-					pidPitch.constrain(-45, 45, -1, 1); // min and max values allowed on pidResult
-					if (SIMULATION_MODE)
+					
+					if (testAlt <= 900)
 					{
-						// send command to change pitch*
-						printf("PC%f\n", float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0))*-1.0);
-						printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+						// climb using pitch attiude hold
+						//printf("wtf: alt=%f\n",testAlt);
+						pidPitch.calculateIdeal(mpu.CombinedAngles_s.pitch, 20.0);
+						pidPitch.constrain(-25, 25, 0, 0); // min and max values allowed on pidResult
+						
+						//printf("wtf: alt=%f\n",pidPitch.getPidResult());
+						if (SIMULATION_MODE)
+						{
+							// send command to change pitch*
+							printf("PC%f\n", float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0)); // TODO: check what happend when in_min and in_max equals (when i set them both to -25.0 the simulator crashed)
+							printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+						}
+					}
+					else if (testAlt >= 1150)
+					{
+						//ascend
+						pidPitch.calculateIdeal(mpu.CombinedAngles_s.pitch, -5.0);
+						pidPitch.constrain(-25, 25, -1, 1); // min and max values allowed on pidResult
+						if (SIMULATION_MODE)
+						{
+							// send command to change pitch*
+							printf("PC%f\n", float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0)); // TODO: check what happend when in_min and in_max equals (when i set them both to -25.0 the simulator crashed)
+							printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+						}
 					}
 					else
 					{
-						pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
-						pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
+						// maintain the height
+						pidAlt.calculate(testAlt*0.098f, 1000*0.098f);
+						printf("wtf: %f\n", pidAlt.getPidResult());
+						pidPitch.calculateIdeal(mpu.CombinedAngles_s.pitch, pidAlt.getPidResult()*-1.0f);
+						pidPitch.constrain(-10, 20, -1, 1); // min and max values allowed on pidResult
+						if (SIMULATION_MODE)
+						{
+							// send command to change pitch*
+							printf("PC%f\n", float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0)); // TODO: check what happend when in_min and in_max equals (when i set them both to -25.0 the simulator crashed)
+							printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+						}
 					}
+//					pidAlt.calculate(testAlt*0.098f, 1500*0.098f);
+//					//pidAlt.constrain(-10, 20, -1, 1);
+//					pidPitch.calculateIdeal(mpu.CombinedAngles_s.pitch, pidAlt.getPidResult());
+//					printf("wtf: b %f\n", pidPitch.getPidResult());
+//					pidPitch.constrain(-10, 20, -1, 1); // min and max values allowed on pidResult
+//					printf("wtf: a p%f\n", pidPitch.getPidResult());
+//					pidPitch.calculateIdeal(mpu.CombinedAngles_s.pitch, pidPitch.getPidResult());
+//					pidPitch.constrain(-10, 20, -1, 1); // min and max values allowed on pidResult
+//					if (SIMULATION_MODE)
+//					{
+//						// send command to change pitch*
+//						printf("PC%f\n", float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0)); // TODO: check what happend when in_min and in_max equals (when i set them both to -25.0 the simulator crashed)
+//						printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+//					}
+					
+//					if (SIMULATION_MODE)
+//					{
+//						// send command to change pitch*
+//						printf("PC%f\n", float(mapDouble(pidPitchAlt.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0)); // TODO: check what happend when in_min and in_max equals (when i set them both to -25.0 the simulator crashed)
+//						printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+//					}
+//					else
+//					{
+//						pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
+//						pwmHandler->sendPWM(rc->rcChannel.Aileron, rc->getChannelPWM(rc->rcChannel.Aileron));
+//					}
 					
 					if (((990 < rc->channels[rc->rcChannel.Elevator-1].pulseWidth) && (rc->channels[rc->rcChannel.Elevator-1].pulseWidth < 1490)) || ((1510 < rc->channels[rc->rcChannel.Elevator-1].pulseWidth) && (rc->channels[rc->rcChannel.Elevator-1].pulseWidth < 2010)))
 					{
@@ -342,24 +413,75 @@ int main()
 				
 				//printf("%.1f\t%.1f\t%.1f\n", mpu.CombinedAngles_s.pitch, mpu.CombinedAngles_s.roll, mpu.CombinedAngles_s.yaw);
 				
-				while((GetTick() > loop_timer) && ((GetTick() - loop_timer) % 19 == 0));
+				while((GetTick() > loop_timer) && ((GetTick() - loop_timer) % servoLoopTimeMs == 0));
 				loop_timer = GetTick();
 			}
 			if (((GetTick() - loop_timer) % anglesRoutineTimems == 0))
 			{
-				GPIOB->ODR ^= GPIO_ODR_ODR13;
+				GPIOB->ODR |= GPIO_ODR_ODR13;
 				if (SIMULATION_MODE)
 				{
 					// read 6dof simulation longitu**** data and store
 					// request data
-					printf("SendP\n");
-					scanf("%f",&simFloatVar);
-					if (simFloatVar >= 0 || simFloatVar <= 0)
-						mpu.setCombinedPitch(simFloatVar);
-					printf("SendR\n");
-					scanf("%f",&simFloatVar);
-					if (simFloatVar >= 0 || simFloatVar <= 0)
-						mpu.setCombinedRoll(simFloatVar);
+					uart_write('S');
+					uart_write('e');
+					uart_write('n');
+					uart_write('d');
+					uart_write('P');
+					uart_write('\n');
+					Serial_Scanf(testBytes, SIMULATION_MSG_LEN); // must know x-plane return msg size
+					GPIOB->ODR &= ~GPIO_ODR_ODR13;
+					//printf("wtf: %c%c%c%c%c\n",testBytes[0],testBytes[1],testBytes[2],testBytes[3],testBytes[4]);
+					if ((testBytes[0] == 'R') && (testBytes[1] == 'R') && (testBytes[2] == 'E') && (testBytes[3] == 'F') && (testBytes[4] == ','))
+					{
+						uint8_t byteCounter = 1;
+						float parsedValue = 0.0;
+						char floatBytesArray[4];
+						bool indexFlag = true;
+						uint8_t packetIndex = 0;
+						for (int i=5;i<SIMULATION_MSG_LEN;i++)
+						{
+							if (byteCounter == 4) // after reading 4 bytes
+							{
+								conv.c[byteCounter-1] = testBytes[i];
+								parsedValue = conv.fval;
+								if (indexFlag)
+									packetIndex = conv.ival;
+								else
+								{
+									switch (packetIndex)
+									{
+										case 0:
+											// Pitch deg
+											mpu.setCombinedPitch(parsedValue);
+											//printf("wtf: P%f\n",parsedValue);
+											break;
+										case 1:
+											// Roll deg
+											mpu.setCombinedRoll(parsedValue);
+											//printf("wtf: R%f\n",parsedValue);
+											break;
+										case 2:
+											// Alt msl
+											testAlt = parsedValue;
+											//printf("wtf: A%f\n",parsedValue);
+											break;
+									}
+								}
+								byteCounter = 1;
+								indexFlag = !indexFlag;
+							}
+							else
+							{
+								conv.c[byteCounter-1] = testBytes[i]; // Little Endian
+								byteCounter += 1;
+							}
+						}
+					}
+					uart_write('A');
+					uart_write('c');
+					uart_write('k');
+					uart_write('\n');
 				}
 				else
 				{
@@ -371,5 +493,6 @@ int main()
 			}
 		}
 	}
+	//free(testBytes);
 	return 0;
 }

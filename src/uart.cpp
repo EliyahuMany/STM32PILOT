@@ -82,6 +82,31 @@ void uart_init(void){
 	USART1->CR1 |= 0x2000; /*enable usart2*/
 	
 }
+int Serial_Scanf(char *ptr, int len)
+{
+	bool foundStart = false;
+  int DataIdx = 0;
+	int c;
+	int lastChar; // added lastChar because my python program send data from x-plane as mixture of ascii and hex, causing /r being send sometimes as part of the float numbers. TODO: find a way to fix this and keep the uart reading normal!
+  while(c != '\n' && lastChar != '\r')
+  {
+		c = uart_read();
+		if (c == '$' && foundStart)
+				break;
+		if (foundStart)
+		{
+			*ptr++=c;
+			DataIdx+=1;
+			lastChar = c;
+		}
+		else
+			if (c == '$')
+			{
+				foundStart = true;
+			}
+  }
+  return DataIdx;
+} 
 
 int uart_write(int ch) {
 	// check
@@ -92,12 +117,12 @@ int uart_write(int ch) {
 }
 
 int	uart_read(void) {
-	uint32_t Tickstart = GetTick();
 	while(!(USART1->SR & USART_SR_RXNE))
 	{
 	} // wait until Rx empty
 	return USART1->DR;
 }
+
 
 namespace std{
 	struct __FILE
