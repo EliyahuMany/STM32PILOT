@@ -29,3 +29,13 @@ int32_t constrain(int32_t in_val, int32_t min_val, int32_t max_val)
 	else
 		return in_val;
 }
+
+float constrainf(float in_val, float min_val, float max_val)
+{
+	if (in_val > max_val)
+		return max_val;
+	else if (in_val < min_val)
+		return min_val;
+	else
+		return in_val;
+}

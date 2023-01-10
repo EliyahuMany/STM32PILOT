@@ -16,6 +16,7 @@ class uartHandler
 		uartHandler(USART_TypeDef* registerStruct, uint32_t baudRate);
 		int read();
 		int write(int ch);
-		int Serial_Scanf(char *ptr, int len);
+		int Scanf(char *ptr, int len);
+		void sendStream(size_t len, char *arr);
 };
 #endif

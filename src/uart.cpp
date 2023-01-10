@@ -56,33 +56,12 @@ int	uartHandler::read(void) {
 }
 
 int uartHandler::write(int ch) {
-	// check
 	while(!(this->registerStruct->SR & USART_SR_TXE)){} // wait until Tx empty
 	this->registerStruct->DR = (ch & 0xFF);
 	return 1;
 }
 
-void uart_init(void){
-	
-	RCC->APB2ENR |=0x04; //00000....100 - Enable GPIOA clock
-	RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
-
-	
-	// TX - Full duplex need alternate function push-pull
-	GPIOA->CRH |= GPIO_CRH_MODE9;
-	GPIOA->CRH |= GPIO_CRH_CNF9_1;
-	// RX - full duplex need input floating / input pull up
-	GPIOA->CRH &= ~GPIO_CRH_MODE10; // 0011 0000 0000 0000
-	GPIOA->CRH |= GPIO_CRH_CNF10_1;
-	
-	USART1->BRR = 0x271; /*9600 baud @ 72MHz*/
-	USART1->CR1 = 0x000C; /*enable TX,RX, set to 8-bit data*/
-	USART1->CR2 = 0x0; /*1 stop bit*/
-	USART1->CR3 = 0x0; /*no flow control*/
-	USART1->CR1 |= 0x2000; /*enable usart2*/
-	
-}
-int Serial_Scanf(char *ptr, int len)
+int uartHandler::Scanf(char *ptr, int len)
 {
 	bool foundStart = false;
   int DataIdx = 0;
@@ -90,7 +69,7 @@ int Serial_Scanf(char *ptr, int len)
 	int lastChar; // added lastChar because my python program send data from x-plane as mixture of ascii and hex, causing /r being send sometimes as part of the float numbers. TODO: find a way to fix this and keep the uart reading normal!
   while(c != '\n' && lastChar != '\r')
   {
-		c = uart_read();
+		c = this->read();
 		if (c == '$' && foundStart)
 				break;
 		if (foundStart)
@@ -108,19 +87,22 @@ int Serial_Scanf(char *ptr, int len)
   return DataIdx;
 } 
 
+
+void uartHandler::sendStream(size_t len, char *arr)
+{
+ while(len--)
+ {
+	 this->write((int)*arr++);
+ }
+}
+
+
+// temporarly use printf to send streams of mixed types, TODO: fix sendStream
 int uart_write(int ch) {
-	// check
 	while(!(USART1->SR & USART_SR_TXE)){} // wait until Tx empty
 	USART1->DR = (ch & 0xFF);
 	return 1;
 		
-}
-
-int	uart_read(void) {
-	while(!(USART1->SR & USART_SR_RXNE))
-	{
-	} // wait until Rx empty
-	return USART1->DR;
 }
 
 
@@ -130,17 +112,6 @@ namespace std{
 	FILE __stdout;
 	FILE __stdin;
 	FILE __stderr;
-
-	int fgetc(FILE *f) {
-		int c;
-		c = uart_read();
-		if (c == '\r') {
-			uart_write(c);
-			c = '\n';
-		}
-		uart_write(c);
-		return c;
-	}
 	
 	int fputc(int c, FILE *stream) {
 		return uart_write(c);

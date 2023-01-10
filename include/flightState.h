@@ -7,7 +7,10 @@ enum FlightStates {
 	AirPlaneInit,
 	Disco,
 	Rates,
-	AttitudeHold
+	PitchHold,
+	RollHold,
+	AttitudeHold,
+	AltHold
 };
 
 struct AttitudeHoldParams
@@ -17,17 +20,42 @@ struct AttitudeHoldParams
 	
 };
 
+struct PitchHoldParams
+{
+	float desiredPitch;
+};
+
+struct RollHoldParams
+{
+	float desiredRoll;
+};
+
+struct AttitudeAltHoldParams
+{
+	float desiredAltitude;
+};
+
 
 class FlightState
 {
 	private:
 		AttitudeHoldParams attitudeHoldParameters;
+		AttitudeAltHoldParams attitudeAltHoldParameters;
+		PitchHoldParams pitchHoldParameters;
+		RollHoldParams rollHoldParameters;
 	public:
 		FlightState();
 		FlightStates currentState;
 		FlightStates lastState;
 		void AttitudeHold(float desiredPitch, float desiredRoll);
 		AttitudeHoldParams GetAttitudeHoldParams();
+		void AttitudeAltHold(float desiredAltitude);
+		AttitudeAltHoldParams GetAttitudeAltHoldParams();
+		void setAltHoldParams(float desiredAltitude);
+		PitchHoldParams GetPitchHoldParams();
+		void setPitchHoldParams(float desiredPitch);
+		RollHoldParams GetRollHoldParams();
+		void setRollHoldParams(float desiredRoll);
 		void setAttitudeHoldRoll(float desiredRoll);
 		void setAttitudeHoldPitch(float desiredPitch);
 };
