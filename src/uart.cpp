@@ -47,7 +47,7 @@ uartHandler::uartHandler(USART_TypeDef* registerStruct, uint32_t baudRate)
 	registerStruct->CR1 = USART_CR1_TE | USART_CR1_RE;
 	registerStruct->CR2 = 0x0; /*1 stop bit*/
 	registerStruct->CR3 = 0x0; /*no flow control*/
-	registerStruct->CR1 |= USART_CR1_UE; /*enable usart2*/
+	registerStruct->CR1 |= USART_CR1_UE; /*enable usart*/
 }
 
 int	uartHandler::read(void) {
@@ -66,27 +66,24 @@ int uartHandler::Scanf(char *ptr, int len)
 	bool foundStart = false;
   int DataIdx = 0;
 	int c;
-	int lastChar; // added lastChar because my python program send data from x-plane as mixture of ascii and hex, causing /r being send sometimes as part of the float numbers. TODO: find a way to fix this and keep the uart reading normal!
-  while(c != '\n' && lastChar != '\r')
+  while(DataIdx < len)
   {
+		//GPIOB->ODR ^= GPIO_ODR_ODR14;
 		c = this->read();
-		if (c == '$' && foundStart)
-				break;
 		if (foundStart)
 		{
 			*ptr++=c;
 			DataIdx+=1;
-			lastChar = c;
 		}
 		else
 			if (c == '$')
 			{
 				foundStart = true;
 			}
+		//GPIOB->ODR ^= GPIO_ODR_ODR14;
   }
   return DataIdx;
-} 
-
+}
 
 void uartHandler::sendStream(size_t len, char *arr)
 {
@@ -112,6 +109,7 @@ namespace std{
 	FILE __stdout;
 	FILE __stdin;
 	FILE __stderr;
+	
 	
 	int fputc(int c, FILE *stream) {
 		return uart_write(c);

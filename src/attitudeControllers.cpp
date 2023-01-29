@@ -1,6 +1,7 @@
 #include "attitudeControllers.h"
 #include "uart.h"
 
+
 AttitudeControllers::AttitudeControllers(RemoteController *rc, FlightState *flightState)
 {
 	this->rc = rc;
@@ -18,7 +19,7 @@ void AttitudeControllers::pitchController(PIDController *pidController, Position
 void AttitudeControllers::rollController(PIDController *pidController, PositionsAngles_s *UAVData, float desiredValue, float minDegreeAllowed, float maxDegreeAllowed, float minDeadZone, float maxDeadZone)
 {
 	pidController->calculateIdeal(UAVData->roll, desiredValue);
-	pidController->constrain(minDegreeAllowed, maxDegreeAllowed, minDeadZone, maxDeadZone); // the "next" pitch degree wanted to acheive the desired pitch. stored in pidResult	
+	pidController->constrain(minDegreeAllowed, maxDegreeAllowed, minDeadZone, maxDeadZone); // the "next" roll degree wanted to acheive the desired pitch. stored in pidResult	
 	if (detectRCOutDeadZone(this->rc, ROLL))
 		changePidSetPoint(this->flightState, this->rc);
 }
@@ -56,4 +57,4 @@ void AttitudeControllers::changePidSetPoint(FlightState *flightState, RemoteCont
 		default:
 			break;
 	}
-}
+}														 

@@ -6,7 +6,6 @@
 enum FlightStates { 
 	AirPlaneInit,
 	Disco,
-	Rates,
 	PitchHold,
 	RollHold,
 	AttitudeHold,
@@ -35,7 +34,6 @@ struct AttitudeAltHoldParams
 	float desiredAltitude;
 };
 
-
 class FlightState
 {
 	private:
@@ -58,5 +56,6 @@ class FlightState
 		void setRollHoldParams(float desiredRoll);
 		void setAttitudeHoldRoll(float desiredRoll);
 		void setAttitudeHoldPitch(float desiredPitch);
+		
 };
 #endif

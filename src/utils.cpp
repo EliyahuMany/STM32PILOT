@@ -9,7 +9,7 @@ long map(long x, long in_min, long in_max, long out_min, long out_max)
 
 double mapDouble(double x, double in_min, double in_max, double out_min, double out_max)
 {
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+  return (((x - in_min) * (out_max - out_min)) / (in_max - in_min)) + out_min;
 }
 
 int deg_to_ccr(long deg)

@@ -14,6 +14,12 @@ double mapDouble(double x, double in_min, double in_max, double out_min, double 
 int32_t constrain(int32_t in_val, int32_t min_val, int32_t max_val);
 float constrainf(float in_val, float min_val, float max_val);
 
+struct GPS
+	{
+		double lat;
+		double lon;
+	};
+
 struct PositionsAngles_s
 {
 	float throttle;
@@ -22,6 +28,7 @@ struct PositionsAngles_s
 	float yaw;
 	float alt;
 	
+	GPS gps;
 };
 
 #endif

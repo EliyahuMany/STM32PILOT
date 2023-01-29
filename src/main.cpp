@@ -13,23 +13,20 @@
 #include "attitudeControllers.h"
 
 #define SIMULATION_MODE true
-#define SIMULATION_MSG_LEN 37
+#define SIMULATION_MSG_LEN 5+(7*8)
+#define LOG false
 
-//volatile uint32_t msTicks, _tick,loop_timer = 0 ;
 volatile uint32_t loop_timer,last = 0;
 volatile unsigned char led_on;
 volatile uint32_t count, prev, tot, now = 0 ;
 volatile uint32_t count2, prev2, tot2 = 0 ;
 volatile bool press,int_flag = false;
-const uint8_t anglesRoutineTimems = 4;
-const uint8_t servoLoopTimeMs = 4*5-1;
-int loopCounter = 0;
-int wtf = 0;
-bool start = false;
+const uint8_t anglesRoutineTimems = 13; // higher time while using simulation - first byte from python code takes long time (need to fix)
+const uint8_t servoLoopTimeMs = anglesRoutineTimems*2;
+const uint8_t logLoopTimeMs = anglesRoutineTimems*6;
+bool start = true;
 
 double oldKp,oldKi,oldKd;
-
-float simFloatVar;
 
 bool pitchAttitudeFirst, rollAttitudeFirst, altAttitudeFirst, throttleAttitudeFirst = true;
 
@@ -62,6 +59,19 @@ extern "C" void TIM3_IRQHandler(void)
 	rc->chan_counter(5);
 }
 
+
+
+struct simpleLogger
+{
+	float throttle, throttleCmd;
+	float pitch, pitchCmd, pitchDesired;
+	float roll, rollCmd, rollDesired;
+	float alt, altDesired;
+	int mode; // 1 Roll, 2 Pitch, 3 Alt, 4 Disco
+};
+
+
+
 int main()
 {
 	
@@ -93,13 +103,19 @@ int main()
 	GPIOB->CRH &= ~GPIO_CRH_CNF14_0;
 	GPIOB->CRH &= ~GPIO_CRH_CNF14_1;
 	
+	GPIOB->CRH &= ~GPIO_CRH_MODE15_0;
+	GPIOB->CRH |= GPIO_CRH_MODE15_1;
+	
+	GPIOB->CRH &= ~GPIO_CRH_CNF15_0;
+	GPIOB->CRH &= ~GPIO_CRH_CNF15_1;
+	
 	
 	SysTick_Config(SystemCoreClock/1000U); // config systick to call his handler every 1ms
 	
 	I2C_Handler *hi2c2 = new I2C_Handler(I2C2,false,false,8000000,200000);
 	
 	MPU6050 mpu = MPU6050(hi2c2, 0x68);
-	for (int i=0;i<10000000;i++); // small delay for preventing touch movement
+	for (int i=0;i<10000000;i++); // small delay in order to prevent touch movement to be taken into the init process
 	mpu.mpuInit();
 	
 	PIDController pidRoll = PIDController(anglesRoutineTimems/1000.0, 0.98, 6.8, 0.0003);
@@ -107,6 +123,7 @@ int main()
 	PIDController pidPitchAlt = PIDController(anglesRoutineTimems/1000.0, 1.1, 10.0, 0.0);
 	PIDController pidAlt = PIDController(anglesRoutineTimems/1000.0, 1.0, 0.1, 0.01);
 	PIDController pidThrottle = PIDController(anglesRoutineTimems/1000.0, 2.4, 5.1, 0.04);
+	PIDController pidHeading = PIDController(anglesRoutineTimems/1000.0, 1.0, 0.1, 0.01);
 	
 
 	TIM_TypeDef* timers[] = {TIM4};
@@ -115,53 +132,78 @@ int main()
 	FlightState *flightState = new FlightState();
 	AttitudeControllers attitudeController(rc, flightState);
 	PositionsAngles_s UAVdata;
+	simpleLogger log;
+	log.mode = 4;
 
 	flightState->currentState = Disco;
 	start = false;
 	
-	char testBytes[61];
+	char receivedBytes[SIMULATION_MSG_LEN];
 	hexToFloat conv;
-	
+	loop_timer = GetTick();
+
 	while (true)
 	{
 		if (flightState->currentState == Disco)
 		{
-			//loop_timer = GetTick();
-			// no need to check mpu and other things, just pass the user receiver values
-			if (SIMULATION_MODE)
+			if ((GetTick() > loop_timer) && ((GetTick() - loop_timer) % 20 == 0))
 			{
-				// send command to change pitch
-				printf("DP%f\n", float(mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
-				printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
-				printf("DT%f\n", float(mapDouble(rc->channels[rc->rcChannel.Throttle-1].pulseWidth, 1500, 2000, 0.0, 1.0)));
-				UAVdata.throttle = float(mapDouble(rc->channels[rc->rcChannel.Throttle-1].pulseWidth, 1500, 2000, 0.0, 1.0));
-			}
-			else
-			{
-				pwmHandler->Disco(rc);
-			}
-			// check if switch changed position - change flight state
-			if (rc->channels[rc->rcChannel.SwA-1].pulseWidth > 1800)
-			{
-				if (rc->channels[rc->rcChannel.SwB-1].pulseWidth < 1100)
+				if (log.mode != 4)
+					log.mode = 4;
+				if (SIMULATION_MODE)
 				{
-					flightState->currentState = RollHold;
-					flightState->setRollHoldParams(0.0);
-				}
-				else if ((rc->channels[rc->rcChannel.SwB-1].pulseWidth > 1400) && (rc->channels[rc->rcChannel.SwB-1].pulseWidth < 1800))
-				{
-					flightState->currentState = PitchHold;
-					flightState->setPitchHoldParams(20.0);
+					// send command to change pitch
+					printf("DP%f\n", float(mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+					printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
+					printf("DT%f\n", float(mapDouble(rc->channels[rc->rcChannel.Throttle-1].pulseWidth, 1500, 2000, 0.0, 1.0)));
+					UAVdata.throttle = float(mapDouble(rc->channels[rc->rcChannel.Throttle-1].pulseWidth, 1500, 2000, 0.0, 1.0));
+					log.rollCmd = float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0));
+					log.pitchCmd = float(mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -1.0, 1.0));
+					log.throttleCmd = UAVdata.throttle;
 				}
 				else
 				{
-					flightState->currentState = AltHold;
-					flightState->AttitudeAltHold(1000.0);
+					pwmHandler->Disco(rc);
 				}
-				start = false;
+				// check if switch changed position - change flight state
+				if (rc->channels[rc->rcChannel.SwA-1].pulseWidth > 1800)
+				{
+					if (rc->channels[rc->rcChannel.SwB-1].pulseWidth < 1100)
+					{
+						flightState->currentState = RollHold;
+						flightState->setRollHoldParams(0.0);
+					}
+					else if ((rc->channels[rc->rcChannel.SwB-1].pulseWidth > 1400) && (rc->channels[rc->rcChannel.SwB-1].pulseWidth < 1800))
+					{
+						flightState->currentState = PitchHold;
+						flightState->setPitchHoldParams(10.0);
+					}
+					else
+					{
+						flightState->currentState = AltHold;
+						flightState->AttitudeAltHold(1000.0);
+					}
+					start = false;
+				}
+				while(((GetTick() - loop_timer) % 20 == 0));
+				//loop_timer = GetTick();
 			}
-			while(GetTick() - loop_timer < 20);
-			loop_timer = GetTick();
+			if ((GetTick() > loop_timer) && ((GetTick() - loop_timer) % 25 == 0) && LOG == true)
+			{
+				printf("log:m%d\n", log.mode);
+				printf("log:ps%f\n", log.pitch);
+				printf("log:pc%f\n", log.pitchCmd);
+				printf("log:pd%f\n", log.pitchDesired);
+				printf("log:rs%f\n", log.roll);
+				printf("log:rc%f\n", log.rollCmd);
+				printf("log:rd%f\n", log.rollDesired);
+				printf("log:ts%f\n", log.throttle);
+				printf("log:tc%f\n", log.throttleCmd);
+				printf("log:as%f\n", log.alt);
+				printf("log:ad%f\n", log.altDesired);
+				while((GetTick() - loop_timer) % 25 == 0);
+				loop_timer = GetTick();
+			}
 		}
 		else if (flightState->currentState == AttitudeHold || flightState->currentState == PitchHold || flightState->currentState == RollHold || flightState->currentState == AltHold)
 		{
@@ -178,31 +220,41 @@ int main()
 				if (!throttleAttitudeFirst)
 							throttleAttitudeFirst = true;
 			}
-			if ((GetTick() > loop_timer) && ((GetTick() - loop_timer) % servoLoopTimeMs == 0))
+			if ((GetTick() >= loop_timer) && ((GetTick() - loop_timer) % servoLoopTimeMs == 0))
 			{
+				GPIOB->ODR ^= GPIO_ODR_ODR14;
 				if (flightState->currentState == PitchHold)
 				{
 					if (pitchAttitudeFirst)
+					{
 						pidPitch.resetError();
-					GPIOB->ODR ^= GPIO_ODR_ODR14;
+						log.mode = 2;
+					}
 					attitudeController.pitchController(&pidPitch, &UAVdata, flightState->GetPitchHoldParams().desiredPitch, -25.0, 25.0, 0, 0);
 					if (SIMULATION_MODE)
 					{
 						// send command to change pitch*
 						printf("PC%f\n", float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0)); // TODO: check what happend when in_min and in_max equals (when i set them both to -25.0 the simulator crashed)
+						log.pitchCmd = float(mapDouble(pidPitch.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0);
+						log.pitchDesired = flightState->GetPitchHoldParams().desiredPitch;
 						printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
 					}
 				}
 				else if (flightState->currentState == RollHold)
 				{
 					if (rollAttitudeFirst)
+					{
 						pidRoll.resetError();
-					GPIOB->ODR ^= GPIO_ODR_ODR14;
+						log.mode = 1;
+					}
 					attitudeController.rollController(&pidRoll, &UAVdata, flightState->GetRollHoldParams().desiredRoll, -30.0, 30.0, 0, 0);
+
 					if (SIMULATION_MODE)
 					{
 						// send command to change pitch*
 						printf("RC%f\n", float(mapDouble(pidRoll.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0)); // TODO: check what happend when in_min and in_max equals (when i set them both to -25.0 the simulator crashed)
+						log.rollCmd = float(mapDouble(pidRoll.getPidResult(), -45.0, 45.0, -1.0, 1.0)*-1.0);
+						log.rollDesired = flightState->GetRollHoldParams().desiredRoll;
 						printf("DP%f\n", float(mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -1.0, 1.0))); // TODO: add deg parmeter so only one command will change the servos/simulation.
 					}
 					else
@@ -218,7 +270,6 @@ int main()
 						pidRoll.resetError();
 					if (pitchAttitudeFirst)
 						pidPitch.resetError();
-					GPIOB->ODR ^= GPIO_ODR_ODR14;
 					attitudeController.pitchController(&pidPitch, &UAVdata, flightState->GetPitchHoldParams().desiredPitch, -25.0, 25.0, 0, 0);
 					attitudeController.rollController(&pidRoll, &UAVdata, flightState->GetRollHoldParams().desiredRoll, -30.0, 30.0, 0, 0);
 					if (SIMULATION_MODE)
@@ -231,8 +282,14 @@ int main()
 					}
 					else
 					{
+						if (pitchAttitudeFirst)
+						{
+							pitchAttitudeFirst = false;
+							pidPitch.resetError();
+						}
 						pwmHandler->sendPWM(rc->rcChannel.Elevator, pwmHandler->constrain(pidPitch.getPidResult()));
 						pwmHandler->sendPWM(rc->rcChannel.Aileron, pwmHandler->constrain(pidRoll.getPidResult()));
+
 					}
 				}
 				else if (flightState->currentState == AltHold)
@@ -242,15 +299,17 @@ int main()
 						pidAlt.resetError();
 						pidThrottle.resetError();
 						altAttitudeFirst = false;
+						log.mode = 3;
 					}
-					GPIOB->ODR ^= GPIO_ODR_ODR14;
 					pidAlt.calculateIdeal(UAVdata.alt, flightState->GetAttitudeAltHoldParams().desiredAltitude);
 					pidThrottle.calculateIdeal(UAVdata.throttle, pidAlt.getPidResult());
 					pidThrottle.constrain(-10.0, 10.0, -3.0, 3.0);
+					log.altDesired = flightState->GetAttitudeAltHoldParams().desiredAltitude;
 					if (SIMULATION_MODE)
 					{
 						// send command to change throttle*
 						printf("TC%f\n", float(mapDouble(pidThrottle.getPidResult(), -10.0, 10.0, 0.8, 1.0)));
+						log.throttleCmd = float(mapDouble(pidThrottle.getPidResult(), -10.0, 10.0, 0.8, 1.0));
 						// control pitch/roll via RC
 						printf("DP%f\n", float(mapDouble(rc->channels[rc->rcChannel.Elevator-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
 						printf("DR%f\n", float(mapDouble(rc->channels[rc->rcChannel.Aileron-1].pulseWidth, 1000, 2000, -1.0, 1.0)));
@@ -300,6 +359,8 @@ int main()
 				if (rc->channels[rc->rcChannel.SwA-1].pulseWidth < 1400)
 				{
 					flightState->currentState = Disco;
+					if (log.mode != 4)
+						log.mode = 4;
 				}
 				else if (rc->channels[rc->rcChannel.SwB-1].pulseWidth < 1100)
 				{
@@ -314,16 +375,20 @@ int main()
 					flightState->currentState = AltHold;
 				}
 				
-				//printf("%.1f\t%.1f\t%.1f\n", mpu.CombinedAngles_s.pitch, mpu.CombinedAngles_s.roll, mpu.CombinedAngles_s.yaw);
 				
-				while((GetTick() > loop_timer) && ((GetTick() - loop_timer) % servoLoopTimeMs == 0));
+				while((GetTick() > loop_timer) && ((GetTick() - loop_timer) % servoLoopTimeMs != 0));
+				GPIOB->ODR ^= GPIO_ODR_ODR14;
 				loop_timer = GetTick();
 			}
-			if (((GetTick() - loop_timer) % anglesRoutineTimems == 0))
+			if ((GetTick() >= loop_timer) && ((GetTick() - loop_timer) % anglesRoutineTimems == 0))
 			{
-				GPIOB->ODR |= GPIO_ODR_ODR13;
+				GPIOB->ODR ^= GPIO_ODR_ODR13;
 				if (SIMULATION_MODE)
 				{
+					/* TODO:
+						when sending data over uart, it takes for the python code time to proccess it and sending back.
+						while in simulation mode - the loops times will be bigger then the loops time using hardware
+					*/
 					// read 6dof simulation data and store
 					// request data
 					huart1->write('S');
@@ -332,21 +397,21 @@ int main()
 					huart1->write('d');
 					huart1->write('P');
 					huart1->write('\n');
-					huart1->Scanf(testBytes, SIMULATION_MSG_LEN); // must know x-plane return msg size
-					GPIOB->ODR &= ~GPIO_ODR_ODR13;
-					//printf("deb: %c%c%c%c%c\n",testBytes[0],testBytes[1],testBytes[2],testBytes[3],testBytes[4]);
-					if ((testBytes[0] == 'R') && (testBytes[1] == 'R') && (testBytes[2] == 'E') && (testBytes[3] == 'F') && (testBytes[4] == ','))
+					huart1->Scanf(receivedBytes, SIMULATION_MSG_LEN); // must know x-plane return msg size
+					//GPIOB->ODR &= ~GPIO_ODR_ODR13;
+					//printf("deb: %c%c%c%c%c\n",receivedBytes[0],receivedBytes[1],receivedBytes[2],receivedBytes[3],receivedBytes[4]);
+					if ((receivedBytes[0] == 'R') && (receivedBytes[1] == 'R') && (receivedBytes[2] == 'E') && (receivedBytes[3] == 'F') && (receivedBytes[4] == ','))
 					{
 						// TODO: add crc check of the data4
 						uint8_t byteCounter = 1;
-						float parsedValue = 0.0;
+						float parsedValue = -999.0;
 						bool indexFlag = true;
 						uint8_t packetIndex = 0;
 						for (int i=5;i<SIMULATION_MSG_LEN;i++)
 						{
 							if (byteCounter == 4) // after reading 4 bytes
 							{
-								conv.c[byteCounter-1] = testBytes[i];
+								conv.c[byteCounter-1] = receivedBytes[i];
 								parsedValue = conv.fval;
 								if (indexFlag)
 									packetIndex = conv.ival;
@@ -359,13 +424,17 @@ int main()
 											if (parsedValue >= -90 && parsedValue <= 90)
 											{
 												UAVdata.pitch = parsedValue;
-												//printf("deb: P%f\n",parsedValue);
+												log.pitch = UAVdata.pitch;
+												//printf("deb: Pitch %f\n",parsedValue);
 											}
 											break;
 										case 1:
 											// Roll deg
 											if (parsedValue >= -90 && parsedValue <= 90)
+											{
 												UAVdata.roll = parsedValue;
+												log.roll = UAVdata.roll;
+											}
 											//printf("deb: R%f\n",parsedValue);
 											break;
 										case 2:
@@ -373,6 +442,7 @@ int main()
 											if (parsedValue >= -500 && parsedValue <= 20000)
 											{	
 												UAVdata.alt = parsedValue;
+												log.alt = UAVdata.alt;
 												//printf("deb: A%f\n",parsedValue);
 											}
 											break;
@@ -381,8 +451,32 @@ int main()
 											if (parsedValue >= -0.0 && parsedValue <= 1.0)
 											{	
 												UAVdata.throttle = parsedValue;
+												log.throttle = UAVdata.throttle;
 												//printf("deb: A%f\n",parsedValue);
 											}
+											break;
+										case 4:
+											// heading
+											if (parsedValue >= 0.0 && parsedValue <= 360.0)
+											{	
+												UAVdata.yaw = parsedValue;
+												//printf("deb: A%f\n",parsedValue);
+											}
+											break;
+										case 5:
+											// latitude
+											if (parsedValue >= -90.0 && parsedValue <= 90.0)
+											{	
+												UAVdata.gps.lat = parsedValue;
+											}
+											break;
+										case 6:
+											// longitude
+											if (parsedValue >= -180.0 && parsedValue <= 180.0)
+											{	
+												UAVdata.gps.lon = parsedValue;
+											}
+											break;
 									}
 								}
 								byteCounter = 1;
@@ -390,7 +484,7 @@ int main()
 							}
 							else
 							{
-								conv.c[byteCounter-1] = testBytes[i]; // Little Endian
+								conv.c[byteCounter-1] = receivedBytes[i]; // Little Endian
 								byteCounter += 1;
 							}
 						}
@@ -409,8 +503,29 @@ int main()
 					UAVdata.pitch = mpu.CombinedAngles_s.pitch;
 					UAVdata.yaw = mpu.CombinedAngles_s.yaw;
 					UAVdata.roll = mpu.CombinedAngles_s.roll;
+					log.pitch = UAVdata.pitch;
+					log.roll = UAVdata.roll;
 				}
-				while((GetTick() - loop_timer) % anglesRoutineTimems == 0);
+				while((GetTick() > loop_timer) && ((GetTick() - loop_timer) % anglesRoutineTimems != 0));
+				GPIOB->ODR ^= GPIO_ODR_ODR13;
+				// because this is the fastast loop, dont "reset" loop_timer or else it will keep looping here
+			}
+			else if ((GetTick() >= loop_timer) && ((GetTick() - loop_timer) % logLoopTimeMs == 0) && LOG == true)
+			{
+				GPIOB->ODR ^= GPIO_ODR_ODR15;
+				printf("log:m%d\n", log.mode);
+				printf("log:ps%f\n", log.pitch);
+				printf("log:pc%f\n", log.pitchCmd);
+				printf("log:pd%f\n", log.pitchDesired);
+				printf("log:rs%f\n", log.roll);
+				printf("log:rc%f\n", log.rollCmd);
+				printf("log:rd%f\n", log.rollDesired);
+				printf("log:ts%f\n", log.throttle);
+				printf("log:tc%f\n", log.throttleCmd);
+				printf("log:as%f\n", log.alt);
+				printf("log:ad%f\n", log.altDesired);
+				while((GetTick() > loop_timer) && ((GetTick() - loop_timer) % logLoopTimeMs != 0));
+				loop_timer = GetTick();
 			}
 		}
 	}

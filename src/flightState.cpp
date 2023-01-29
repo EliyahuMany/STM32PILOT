@@ -57,4 +57,3 @@ AttitudeAltHoldParams FlightState::GetAttitudeAltHoldParams()
 	return this->attitudeAltHoldParameters;
 }
 
-
