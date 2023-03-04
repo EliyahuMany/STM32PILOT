@@ -12,11 +12,10 @@ PIDController::PIDController(double dt, double Kp, double Ki, double Kd)
 	//this->previousDerivative = 0;
 }
 
-void PIDController::calculate(double pval, double setpoint)
+void PIDController::calculate(double pval, double setpoint, double error)
 {
-	double error;
-
-	error = pval - setpoint;
+	if (error == 99999)
+		error = pval - setpoint;
 	this->error = error;
 	
 	// proportinal calc

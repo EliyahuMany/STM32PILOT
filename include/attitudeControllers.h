@@ -21,6 +21,8 @@ class AttitudeControllers
 		void altController(PIDController *pidController, PositionsAngles_s *UAVData, float desiredValue, float minDegreeAllowed, float maxDegreeAllowed, float minDeadZone, float maxDeadZone);
 		void changePidSetPoint(FlightState *flightState, RemoteController *rc);
 		bool detectRCOutDeadZone(RemoteController *rc, uint8_t rcChannel);
+		double calcHeadingToCoord(double current_lat, double current_long, double target_lat, double target_long);
+		double calculate_heading_error(double current_lat, double current_long, double target_lat, double target_long, double current_heading);
 };
 
 #endif

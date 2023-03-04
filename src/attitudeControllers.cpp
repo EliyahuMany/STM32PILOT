@@ -1,6 +1,6 @@
 #include "attitudeControllers.h"
 #include "uart.h"
-
+#include "math.h"
 
 AttitudeControllers::AttitudeControllers(RemoteController *rc, FlightState *flightState)
 {
@@ -57,4 +57,20 @@ void AttitudeControllers::changePidSetPoint(FlightState *flightState, RemoteCont
 		default:
 			break;
 	}
-}														 
+}
+
+double AttitudeControllers::calcHeadingToCoord(double current_lat, double current_long, double target_lat, double target_long)
+{
+	double heading = atan2(target_long - current_long, target_lat - current_lat);
+	return heading;
+}
+
+double AttitudeControllers::calculate_heading_error(double current_lat, double current_long, double target_lat, double target_long, double current_heading)
+{
+  double target_heading = calcHeadingToCoord(current_lat, current_long, target_lat, target_long);
+  double heading_error = target_heading - current_heading;
+  // Normalize heading error to -180 to 180 degrees
+  //heading_error = fmod(heading_error + PI, 2 * PI) - PI;
+  return heading_error;
+}
+															 

@@ -7,7 +7,7 @@ class PIDController
 {
 	public:
 		PIDController(double dt, double Kp, double Ki, double Kd);
-		void calculate(double pval, double setpoint);
+		void calculate(double pval, double setpoint, double error);
 		void calculateIdeal(double pval, double setpoint);
 		double getError();
 		double getPrevError();

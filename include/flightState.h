@@ -9,7 +9,8 @@ enum FlightStates {
 	PitchHold,
 	RollHold,
 	AttitudeHold,
-	AltHold
+	AltHold,
+	WPS
 };
 
 struct AttitudeHoldParams
@@ -44,7 +45,7 @@ class FlightState
 	public:
 		FlightState();
 		FlightStates currentState;
-		FlightStates lastState;
+		//FlightStates lastState;
 		void AttitudeHold(float desiredPitch, float desiredRoll);
 		AttitudeHoldParams GetAttitudeHoldParams();
 		void AttitudeAltHold(float desiredAltitude);
