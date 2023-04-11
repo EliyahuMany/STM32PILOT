@@ -11,7 +11,10 @@ Check out some demos of the project in action:
 - Attitude control - Roll Hold (pitch and throttle controlled by the user):<br>
     ![Roll Hold](https://github.com/udi741/STM32PILOT/blob/main/git-media/RollHold.gif)
 - Advanced - Fly toward list of Waypoints autonomously:<br>
-    ![Fly to waypoints](https://github.com/udi741/STM32PILOT/blob/main/git-media/FlyToWaypoints.gif)
+    ![Fly to waypoints](https://github.com/udi741/STM32PILOT/blob/main/git-media/FlyToWaypoints.gif)<br>
+![Roll and Aileron command](https://github.com/udi741/STM32PILOT/blob/main/git-media/Roll_AileronCmd.png "Roll and Aileron command")<br>
+![Distance to next waypoint](https://github.com/udi741/STM32PILOT/blob/main/git-media/DistanceToWP.png "Distance to next waypoint")<br>
+![Flight path](https://github.com/udi741/STM32PILOT/blob/main/git-media/FlightPath.png "Flight path")<br>
 
 
 # Requirements
@@ -25,9 +28,9 @@ Check out some demos of the project in action:
 ## Hardware
 - STM32F103C8T6 "maple mini". (in order to use another version, changes to the code are required)
 - USB to TTL adapter - FT232RL (UART) to communicate with the X-Plane simulator
-- Optional: any logic analyzer, helped me alot to figure what is wrong in ruff times
 - FLYSKY FS-I6X remote controller
 - FLYSKY FS-iA10B receiver
+- Optional: any logic analyzer, helped me alot to figure what is wrong in rough times
 ## Installation
 To install and set up the project:
 
