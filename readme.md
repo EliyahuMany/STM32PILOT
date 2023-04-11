@@ -12,9 +12,9 @@ Check out some demos of the project in action:
     ![Roll Hold](https://github.com/udi741/STM32PILOT/blob/main/git-media/RollHold.gif)
 - Advanced - Fly toward list of Waypoints autonomously:<br>
     ![Fly to waypoints](https://github.com/udi741/STM32PILOT/blob/main/git-media/FlyToWaypoints.gif)<br>
-![Roll and Aileron command](https://github.com/udi741/STM32PILOT/blob/main/git-media/Roll_AileronCmd.png "Roll and Aileron command")<br>
-![Distance to next waypoint](https://github.com/udi741/STM32PILOT/blob/main/git-media/DistanceToWP.png "Distance to next waypoint")<br>
-![Flight path](https://github.com/udi741/STM32PILOT/blob/main/git-media/FlightPath.png "Flight path")<br>
+    <img src="https://github.com/udi741/STM32PILOT/blob/main/git-media/Roll_AileronCmd.png" title="Roll and Aileron command" width="600" height="450"></img><br>
+    <img src="https://github.com/udi741/STM32PILOT/blob/main/git-media/DistanceToWP.png" title="Distance to next waypoin" width="600" height="450"></img><br>
+    <img src="https://github.com/udi741/STM32PILOT/blob/main/git-media/FlightPath.png" title="Flight path" width="600" height="450"></img><br>
 
 
 # Requirements
