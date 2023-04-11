@@ -7,11 +7,11 @@ STM32PILOT is a project intended to explore the STM32 world while creating a bas
 Check out some demos of the project in action:
 
 - Take-Off using remote controler:
-    ![Take-Off](https://github.com/udi741/STM32PILOT/tree/main/git-media/TakeOff.gif)
+    ![Take-Off](https://github.com/udi741/STM32PILOT/blob/main/git-media/TakeOff.gif)
 - Attitude control - Roll Hold (pitch and throttle controlled by the user):
-    ![Roll Hold](https://github.com/udi741/STM32PILOT/tree/main/git-media/RollHold.gif)
+    ![Roll Hold](https://github.com/udi741/STM32PILOT/blob/main/git-media/RollHold.gif)
 - Advanced - Fly toward list of Waypoints autonomously:
-    ![Fly to waypoints](https://github.com/udi741/STM32PILOT/tree/main/git-media/FlyToWaypoints.gif)
+    ![Fly to waypoints](https://github.com/udi741/STM32PILOT/blob/main/git-media/FlyToWaypoints.gif)
 
 
 # Requirements
