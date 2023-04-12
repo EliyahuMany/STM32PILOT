@@ -34,7 +34,7 @@ Check out some demos of the project in action:
 # Installation
 To install and set up the project:
 
-1. Clone the repository: git clone https://github.com/udi741/STM32PILOT.git
+1. Clone the repository: '''git clone https://github.com/udi741/STM32PILOT.git'''
 2. Install the required dependencies using pip: pip install -r py/requirements.txt
 3. Open the project in Keil uvision 5 or your preferred IDE.
 4. Compile and upload the code.
