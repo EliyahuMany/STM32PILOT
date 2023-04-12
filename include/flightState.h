@@ -17,7 +17,6 @@ struct AttitudeHoldParams
 {
 	float desiredRoll;
 	float desiredPitch;
-	
 };
 
 struct PitchHoldParams
@@ -45,7 +44,6 @@ class FlightState
 	public:
 		FlightState();
 		FlightStates currentState;
-		//FlightStates lastState;
 		void AttitudeHold(float desiredPitch, float desiredRoll);
 		AttitudeHoldParams GetAttitudeHoldParams();
 		void AttitudeAltHold(float desiredAltitude);

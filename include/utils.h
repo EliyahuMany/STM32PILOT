@@ -12,7 +12,7 @@
 #define PI 3.14159265358979323846
 
 long map(long x, long in_min, long in_max, long out_min, long out_max);
-int deg_to_ccr(long deg);
+int deg2ccr(long deg);
 double mapDouble(double x, double in_min, double in_max, double out_min, double out_max);
 int32_t constrain(int32_t in_val, int32_t min_val, int32_t max_val);
 float constrainf(float in_val, float min_val, float max_val);
@@ -22,7 +22,17 @@ double rad2circleDeg(double radians);
 double unwrap(double phase);
 double deg2rad(double degrees);
 double rad2deg(double radians);
-double angle_diff(double angle1, double angle2);
+
+struct simpleLogger
+{
+	float throttle, throttleCmd;
+	float pitch, pitchCmd, pitchDesired;
+	float roll, rollCmd, rollDesired;
+	float alt, altDesired;
+	float heading;
+	int mode; // 1 Roll, 2 Pitch, 3 Alt, 4 Disco, 5 WPS
+	double distanceToWP, bearingToWP;
+};
 
 struct Point {
   double lat;

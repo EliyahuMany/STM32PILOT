@@ -13,7 +13,7 @@ double mapDouble(double x, double in_min, double in_max, double out_min, double 
   return (((x - in_min) * (out_max - out_min)) / (in_max - in_min)) + out_min;
 }
 
-int deg_to_ccr(long deg)
+int deg2ccr(long deg)
 {
 	return map(deg, SERVO_MIN_DEG, SERVO_MAX_DEG, SERVO_MIN_PWM, SERVO_MAX_PWM);
 }
@@ -132,9 +132,4 @@ double deg2rad(double degrees) {
 
 double rad2deg(double radians) {
     return radians * 180.0 / PI;
-}
-
-double angle_diff(double angle1, double angle2) {
-    double diff = angle1 - angle2;
-    return unwrap(diff);
 }

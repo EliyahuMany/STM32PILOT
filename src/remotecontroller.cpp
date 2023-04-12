@@ -91,6 +91,9 @@ void RemoteController::enableTimerChannel(uint8_t channel)
 
 void RemoteController::RCInit()
 {
+	// #####################################################
+	//	TODO: Change this to be controlled by the user.
+	// #####################################################
 //	this->configChannel(TIM4, 1, true, this->rcChannel.Aileron);
 //	this->configChannel(TIM4, 3, true, this->rcChannel.SwC);
 //	this->configChannel(TIM4, 2, true, this->rcChannel.Elevator);
@@ -109,7 +112,7 @@ void RemoteController::RCInit()
 	this->configChannel(TIM4, 1, true, this->rcChannel.VarA);
 	this->configChannel(TIM4, 1, true, this->rcChannel.VarB);
 	this->configChannel(TIM4, 1, true, this->rcChannel.SwA);
-	this->configChannel(TIM4, 1, true, this->rcChannel.SwB);
+	this->configChannel(TIM4, 1, true, this->rcChannel.SwC);
 	this->enableTimerChannel(this->rcChannel.Elevator); // sending only one of the above - because all using the same Timer Channel.
 	
 	
@@ -134,7 +137,7 @@ int32_t RemoteController::getChannelPWM(uint8_t channel)
 
 void RemoteController::chan_counter(uint8_t i) // i IS THE REMOTE CONTROL CHANNEL (not the channel of the timers)
 {
-	i = i-1; // the function called with number of channel (1 to N), but i treated as array position
+	i = i-1; // the function called with number of channel (1 to N), but i treated it as array position
 	uint32_t timerNBaseAddress = (uint32_t)this->channels[i].timer;
 	uint8_t timerChannelOffset = this->channels[i].timerChannel*4;
 	uint32_t ccrValue = (*((uint32_t *)(timerNBaseAddress + CCR_BEGIN_ADDRESS + timerChannelOffset)));

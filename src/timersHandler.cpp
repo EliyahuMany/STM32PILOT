@@ -164,3 +164,4 @@ uint8_t timersHandler::getTotalChannels()
 {
 	return this->channelsCreated;
 }
+

@@ -1,4 +1,9 @@
 #include "pwmGenerator.h"
+/*
+pwmGenerator - Generate pwm using MCU timers.
+TODO: fix Disco function - find a way to know what channels are created.
+			this issue must be fixed in order to make it versatile.
+*/
 
 // globalChannel is used to grab data from parent class which hold the pins and other things
 void pwmGenerator::enableTimerChannelPWM(uint8_t globalChannel)
@@ -126,7 +131,7 @@ void pwmGenerator::Disco(RemoteController* rc)
 
 int pwmGenerator::constrain(double pidResult)
 {
-	int pout_after = deg_to_ccr(pidResult);
+	int pout_after = deg2ccr(pidResult);
 	if (pout_after < SERVO_MIN_PWM)
 			pout_after = SERVO_MIN_PWM;
 	else if (pout_after > SERVO_MAX_PWM)

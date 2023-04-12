@@ -22,7 +22,7 @@ class AttitudeControllers
 		void changePidSetPoint(FlightState *flightState, RemoteController *rc);
 		bool detectRCOutDeadZone(RemoteController *rc, uint8_t rcChannel);
 		double calcHeadingToCoord(double current_lat, double current_long, double target_lat, double target_long);
-		double calculate_heading_error(double current_lat, double current_long, double target_lat, double target_long, double current_heading);
+		//double calculate_heading_error(double current_lat, double current_long, double target_lat, double target_long, double current_heading);
 };
 
 #endif
